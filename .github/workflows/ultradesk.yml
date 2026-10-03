@@ -20,7 +20,7 @@ jobs:
   bridge:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -50,7 +50,7 @@ jobs:
         run: |
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: bridge-artifact
           path: |
@@ -62,12 +62,15 @@ jobs:
   windows:
     needs: bridge
     runs-on: windows-2022
+    env:
+      # Assinatura via Azure Artifact Signing: só roda quando os secrets estão cadastrados
+      SIGN_ENABLED: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: bridge-artifact
           path: ./
@@ -133,6 +136,20 @@ jobs:
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
           mv -Force .\usbmmidd_v2 ./rustdesk
 
+      - name: Sign app files
+        if: env.SIGN_ENABLED == 'true'
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files-folder: ${{ github.workspace }}\rustdesk
+          files-folder-filter: exe,dll
+          files-folder-recurse: true
+
       - name: Build self-extracted executable
         shell: bash
         run: |
@@ -144,7 +161,23 @@ jobs:
           mkdir -p ./output
           mv ./target/release/rustdesk-portable-packer.exe ./output/UltraDesk-${{ env.VERSION }}-x64.exe
 
-      - uses: actions/upload-artifact@v4
+      - name: Sign installer
+        if: env.SIGN_ENABLED == 'true'
+        uses: azure/artifact-signing-action@v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files: ${{ github.workspace }}\output\UltraDesk-${{ env.VERSION }}-x64.exe
+
+      - name: Unsigned build warning
+        if: env.SIGN_ENABLED != 'true'
+        run: echo "::warning::Build SEM assinatura digital (secrets AZURE_* nao cadastrados). O Controle Inteligente de Aplicativos do Windows 11 vai bloquear."
+
+      - uses: actions/upload-artifact@v6
         with:
           name: UltraDesk-windows-x64
           path: ./output/UltraDesk-${{ env.VERSION }}-x64.exe

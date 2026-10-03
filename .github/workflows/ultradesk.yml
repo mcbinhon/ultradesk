@@ -87,7 +87,8 @@ jobs:
       - name: Replace engine with rustdesk custom flutter engine
         run: |
           flutter precache --windows
-          $engine = "${{ steps.flutter.outputs['CACHE-PATH'] }}/bin/cache/artifacts/engine/windows-x64-release"
+          $engine = "$env:FLUTTER_ROOT/bin/cache/artifacts/engine/windows-x64-release"
+          New-Item -ItemType Directory -Force -Path $engine | Out-Null
           Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
           Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
           Copy-Item windows-x64-release/* $engine -Recurse -Force
